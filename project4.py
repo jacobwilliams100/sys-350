@@ -2,7 +2,8 @@
 import getpass
 import json
 import ssl
-from pyVim.connect import SmartConnect
+from pyVim.connect import SmartConnect, Disconnect
+from pyVmomi import vim
 
 ## pulling vcenterhost and vcenteradmin from  vcenter-conf.json
 ## ChatGPT drafted this section for me.
@@ -10,10 +11,14 @@ with open('vcenter-conf.json', 'r') as file:
     data = json.load(file)
 vcenterhost = data['vcenter'][0]['vcenterhost']
 vcenteradmin = data['vcenter'][0]['vcenteradmin']
+print("logging into {vcenterhost} as {vcenteradmin}...")
 
+def login():
+    
 
+## This section if from Andy Dolinski - Making a menu in python on youtube
 def menu():
-    print("[1] Option 1")
+    print("[1] Option 1: Display data from current Pyvmomi session")
     print("[2] Option 2")
     print("[3] Option 3")
     print("[0] Exit the program.")
@@ -24,11 +29,22 @@ def option3():
     passw = getpass.getpass()
     s=ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
     s.verify_mode=ssl.CERT_NONE
-    si=SmartConnect(host=vcenterhost, user=vcenteradmin, pwd=passw, sslContext=s)
-    aboutInfo=si.content.about
-    print(aboutInfo)
-    print(aboutInfo.fullName)
-    
+    ## This section is was drafted by ChatGPT
+    try:
+        si=SmartConnect(host=vcenterhost, user=vcenteradmin, pwd=passw, sslContext=s)
+        aboutInfo=si.content.about
+        print(aboutInfo)
+        print(aboutInfo.fullName)
+    except vim.fault.InvalidLogin as e:
+        print("Error: Incorrect vCenter password!")
+    except Exception as e:
+        print(f"unexpected error: {e}")
+    finally:
+        # Disconnect if connected
+        if 'si' in locals():
+            Disconnect(si)
+
+
 
 menu()
 option = int(input("Enter your option..."))
