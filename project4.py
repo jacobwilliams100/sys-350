@@ -11,9 +11,9 @@ with open('vcenter-conf.json', 'r') as file:
     data = json.load(file)
 vcenterhost = data['vcenter'][0]['vcenterhost']
 vcenteradmin = data['vcenter'][0]['vcenteradmin']
-print("logging into {vcenterhost} as {vcenteradmin}...")
+print(f"logging into {vcenterhost} as {vcenteradmin}...")
 
-def login():
+
     
 
 ## This section if from Andy Dolinski - Making a menu in python on youtube
