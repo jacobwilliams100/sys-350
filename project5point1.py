@@ -9,6 +9,7 @@ import json
 import ssl
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
+from datetime import datetime
 
 ## pulling vcenterhost and vcenteradmin from  vcenter-conf.json
 ## ChatGPT drafted this section for me.
@@ -42,6 +43,8 @@ try:
         print("[5] Power Off a VM")
         print("[6] Take a VM Snapshot")
         print("[7] Restore a VM to Latest Snapshot")
+        print("[8] Clone a VM")
+        print("[9] Delete a VM")
         print("[0] Exit the program.")
 
     menu()
@@ -249,11 +252,10 @@ try:
                 print(f"VM {search_query} not found!")
 
         elif option == 6: ## taking a snapshot.
-            ## we take most of 
+            ## we take some elements from previous steps
             ## drafted by ChatGPT, plus some elements from Michael Rice's pyvmomi community sample: create_snapshot.py
             ## githhub.com/vmware/pyvmomi-community-samples/blob/master/samples/create_snapshot.py
 
-            ## prints all VMs managed by Vcenter
             ## defines container as root folder for VMs
             container = si.content.rootFolder
             ## object type should be VMs
@@ -265,33 +267,142 @@ try:
 
             ## drafted by ChatGPT
             ## prints the name of each VM in the container
-            print("VM details selected...")
+            print("Take a snapshot selected...")
             if vms:
                 print("VMs managed by vcenter:")
                 for vm in vms:
                     print(vm.name)
-                    search_query = input("Enter the name of the VM you want to create a snapshot for...").strip() ## asks user to VM name
-                    print()
             else:
                 ## or if none are in the container
                 print("no VMs detected!")
 
             ## asks user to enter VM name
-            
+            search_query = input("Enter the name of the VM you want a new snapshot of:").strip() #to elminiate blank chars
+            ## didn't implement the "do all" option on this feature because I have been having trouble with storage space limitation.
 
             ## drafted by ChatGPT
+            vm_found = False # if this flag is false, and error is thrown later
             for vm in vms:
                 if search_query.lower() == vm.name.lower(): ## compares query to container (after sanitizing to lowercase)
-                    vm_found = True
-                    print(f"making snapshot for {search_query}")
-                else:
-                    print(f"VM {search_query} not found.")
+                    vm_found = True ## sets flag to avoid error later
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") #creates a timestamp at current date and time
+                    ## create a snapshot which includes the vm's name and a timestamp in the title, and includes the VM's memory state, and no quiescing.
+                    task = vm.CreateSnapshot_Task(name=f"py_Snapshot_{vm.name}_{timestamp}", description="Created using Pyvmomi", memory=True, quiesce=False)
+                    print(f"Created snapshot for {vm.name}...") #message that snapshot was created.
+                
+            if not vm_found: #If a VM that doesn't exist is entered
+                print(f"VM {search_query} not found!")
 
-        elif option == 7:
-            print("op7")
-        elif option == 8:
-            print("op8")
-        elif option == 9:
+        elif option == 7: # restore the most recent snapshot of a VM
+            ## drafted using combination of chatGPT
+            ## and pyvmomi community sample: snapshot_operations.py by Abdul Anshad
+            ##https://github.com/vmware/pyvmomi-community-samples/blob/master/samples/snapshot_operations.py
+
+            ## takes elements from previous steps
+            ## defines container as root folder for VMs
+            container = si.content.rootFolder
+            ## object type should be VMs
+            view_type = [vim.VirtualMachine]
+            ##container view for VMs (true means we cycle through the entire inventory)
+            vm_view = si.content.viewManager.CreateContainerView(container, view_type, True)
+            ## create list vm of all VMs in container
+            vms = vm_view.view
+
+            print("Restore VM snapshot selected...")
+            ## drafted by ChatGPT
+            ## prints the name of each VM in the container
+            
+            if vms:
+                print("VMs managed by vcenter:")
+                for vm in vms:
+                    print(vm.name)
+            else:
+                ## or if none are in the container
+                print("no VMs detected!")
+            
+            ## asks user to enter VM name
+            search_query = input("Enter the name of the VM you want ot restore the msot recent snapshot of...")
+
+            vm_found = False ##variable to track if a valid VM was entered
+            for vm in vms:
+                if search_query.lower() == vm.name.lower(): ## compares query to container (after sanitizing to lowercase)
+                    vm_found = True ##must enable this to dodge error later
+                    if vm.snapshot is None:
+                        print(f"{vm.name} has no snapshots!")
+                    else:
+                        lastsnapshot = vm.snapshot.rootSnapshotList[-1] ##identifying most recent snapshot
+                        print(f"Restoring snapshot {lastsnapshot.name} for VM {vm.name}...") ##tells user which snapshot is restoring for which machine
+                        task = lastsnapshot.snapshot.RevertToSnapshot_Task() ##performs the action of reverting VM to last snapshot
+
+                
+            if not vm_found: #If a VM that doesn't exist is entered
+                print(f"VM {search_query} not found!")
+
+        elif option == 8: ## clone VM (creates full (not linked) clone of VM)
+            ## takes elements from previous steps
+            ## combination of ChatGPT
+            ## and pyvmomi community sample: clone_vm.py by Dann Bohn
+            ##
+
+            ## defines container as root folder for VMs
+            container = si.content.rootFolder
+            ## object type should be VMs
+            view_type = [vim.VirtualMachine]
+            ##container view for VMs (true means we cycle through the entire inventory)
+            vm_view = si.content.viewManager.CreateContainerView(container, view_type, True)
+            ## create list vm of all VMs in container
+            vms = vm_view.view
+
+            print("Clone a VM selected...")
+            ## drafted by ChatGPT
+            ## prints the name of each VM in the container
+            
+            if vms:
+                print("VMs managed by vcenter:")
+                for vm in vms:
+                    print(vm.name)
+            else:
+                ## or if none are in the container
+                print("no VMs detected!")
+            
+            ## asks user to enter VM name
+            search_query = input("Enter the name of the VM you want to clone:") 
+            vm_found = False ##variable to track if a valid VM was entered
+            ## asks user for clone name
+            clone_name = input("Enter the name for the new cloned VM:")
+
+            
+            for vm in vms:
+                if search_query.lower() == vm.name.lower(): ## compares query to container (after sanitizing to lowercase)
+                    vm_found = True ##must enable this to dodge error later
+                    vm_folder = vm.parent ##specifying directory (same as source VM for now)
+                    vm_resource_pool = vm.resourcePool ## specifying resource pool (same as source ppol for now)
+
+                    clone_spec = vim.vm.CloneSpec(
+                        location=vim.vm.RelocateSpec(pool=vm_resource_pool),
+                        powerOn=False, #do not immediately start VM up
+                        template=False #we are not using any template
+                    )
+
+                    print(f"Cloning VM {vm.name} to create new VM {clone_name}")
+
+                    task = vm.CloneVM_Task(
+                        folder=vm_folder, 
+                        name=clone_name,
+                        spec=clone_spec)
+                    
+                    print(f"VM clone task initiated!") #once task is started
+
+                if not vm_found: #if user searches for nonexistent VM
+                    print(f"VM {search_query} not found!")
+
+        elif option == 9: ## delete a VM
+            ## takes elements from previous steps
+            ## combination of ChatGPT
+            ## and pyvmomi community sample: destroy_vm.py by Michael Rice
+            ## https://github.com/vmware/pyvmomi-community-samples/blob/master/samples/destroy_vm.py
+
+            ## defines container as root folder for VM
             print("op9")
         else:
             print("Invalid option!") ## if user picks a number with no assigned option.
