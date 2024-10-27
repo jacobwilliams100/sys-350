@@ -1,7 +1,7 @@
 ## SYS-350-01 Fall 2024 at Champlain College
 ## Jacob Williams
 ## Project: Milestone 5- More Automation with PyVMomi
-## 10/17/2024
+## 10/26/2024
 
 ## importing dependencies...
 import getpass
@@ -135,6 +135,7 @@ try:
 
         elif option == 4: #powering on VMs, recycles content from previous option
             ## drafted by ChatGPT
+            ## with elements from instructor example
             ## prints all VMs managed by Vcenter
             ## defines container as root folder for VMs
             container = si.content.rootFolder
@@ -161,17 +162,17 @@ try:
             print()
 
             ## drafted by ChatGPT
-            if search_query == "": ##blank input
+            if search_query == "": ##blank input, meaning they want all VMs powered on
                 print("No input provided, powering on all VMs...")
                 confirm = input("Are you sure about this? (Y/N:)") #Gets confirmation from user
                 if confirm in ["Y",]: #If user confirms
                     print()
-                    for vm in vms:
+                    for vm in vms: ##for all VMs
                         vm_found = True #need this to prevent error later.
                         if vm.runtime.powerState == 'poweredOff': #checks VM powerstate
                             task = vm.PowerOn() #powers on VM
-                            print(f"Powering on {vm.name}...")
-                        else:
+                            print(f"Powering on {vm.name}...") ##tells user
+                        else: ## for machines already powered-on
                             print(f"{vm.name} is already on.")
                 else:
                     print("Operation cancelled. No changes made") #If user enters N or anything other than Y
@@ -194,6 +195,7 @@ try:
             
         elif option == 5: # Powering off VM, copied mostly from previous option with inverted power options
             ## drafted by ChatGPT
+            ## plus elements from instructor's example
             ## prints all VMs managed by Vcenter
             ## defines container as root folder for VMs
             container = si.content.rootFolder
@@ -278,6 +280,7 @@ try:
 
             ## asks user to enter VM name
             search_query = input("Enter the name of the VM you want a new snapshot of:").strip() #to elminiate blank chars
+            print()
             ## didn't implement the "do all" option on this feature because I have been having trouble with storage space limitation.
 
             ## drafted by ChatGPT
@@ -285,7 +288,7 @@ try:
             for vm in vms:
                 if search_query.lower() == vm.name.lower(): ## compares query to container (after sanitizing to lowercase)
                     vm_found = True ## sets flag to avoid error later
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") #creates a timestamp at current date and time
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") #creates a timestamp at current date and time in the form of YYYYMMDD_HHMMSS
                     ## create a snapshot which includes the vm's name and a timestamp in the title, and includes the VM's memory state, and no quiescing.
                     task = vm.CreateSnapshot_Task(name=f"py_Snapshot_{vm.name}_{timestamp}", description="Created using Pyvmomi", memory=True, quiesce=False)
                     print(f"Created snapshot for {vm.name}...") #message that snapshot was created.
@@ -321,7 +324,8 @@ try:
                 print("no VMs detected!")
             
             ## asks user to enter VM name
-            search_query = input("Enter the name of the VM you want ot restore the msot recent snapshot of...")
+            search_query = input("Enter the name of the VM you want to restore the most recent snapshot of...")
+            print()
 
             vm_found = False ##variable to track if a valid VM was entered
             for vm in vms:
@@ -342,7 +346,6 @@ try:
             ## takes elements from previous steps
             ## combination of ChatGPT
             ## and pyvmomi community sample: clone_vm.py by Dann Bohn
-            ##
 
             ## defines container as root folder for VMs
             container = si.content.rootFolder
@@ -370,31 +373,32 @@ try:
             vm_found = False ##variable to track if a valid VM was entered
             ## asks user for clone name
             clone_name = input("Enter the name for the new cloned VM:")
+            print()
 
-            
             for vm in vms:
                 if search_query.lower() == vm.name.lower(): ## compares query to container (after sanitizing to lowercase)
                     vm_found = True ##must enable this to dodge error later
-                    vm_folder = vm.parent ##specifying directory (same as source VM for now)
+                    vm_folder = vm.parent ##finds directory of VM parent folder
                     vm_resource_pool = vm.resourcePool ## specifying resource pool (same as source ppol for now)
 
                     clone_spec = vim.vm.CloneSpec(
-                        location=vim.vm.RelocateSpec(pool=vm_resource_pool),
+                        location=vim.vm.RelocateSpec(pool=vm_resource_pool), ##specifies destination of VM's files on datastore
                         powerOn=False, #do not immediately start VM up
                         template=False #we are not using any template
                     )
 
-                    print(f"Cloning VM {vm.name} to create new VM {clone_name}")
+                    print(f"Cloning VM {vm.name} to create new VM {clone_name}") ##tells user it has initiated cloning process
+                    print()
 
-                    task = vm.CloneVM_Task(
-                        folder=vm_folder, 
-                        name=clone_name,
-                        spec=clone_spec)
+                    task = vm.CloneVM_Task( ##start up the clone
+                        folder=vm_folder, ##defines clone destination as the same folder as parent
+                        name=clone_name, ## names the new VM the clone_name input from earlier
+                        spec=clone_spec) ##implements the specifications we defined in clone_spec
                     
                     print(f"VM clone task initiated!") #once task is started
 
-                if not vm_found: #if user searches for nonexistent VM
-                    print(f"VM {search_query} not found!")
+            if not vm_found: #if user searches for nonexistent VM
+                print(f"VM {search_query} not found!")
 
         elif option == 9: ## delete a VM
             ## takes elements from previous steps
@@ -402,8 +406,46 @@ try:
             ## and pyvmomi community sample: destroy_vm.py by Michael Rice
             ## https://github.com/vmware/pyvmomi-community-samples/blob/master/samples/destroy_vm.py
 
-            ## defines container as root folder for VM
-            print("op9")
+            ## defines container as root folder for VMs
+            container = si.content.rootFolder
+            ## object type should be VMs
+            view_type = [vim.VirtualMachine]
+            ##container view for VMs (true means we cycle through the entire inventory)
+            vm_view = si.content.viewManager.CreateContainerView(container, view_type, True)
+            ## create list vm of all VMs in container
+            vms = vm_view.view
+
+            print("Delete VM selected...")
+            
+            ## prints list of VMs managed by Vcenter
+            if vms:
+                print("VMs managed by vcenter:")
+                for vm in vms:
+                    print(vm.name)
+            else:
+                ## or if none are in the container
+                print("no VMs detected!")
+            
+            ## asks user to enter VM name
+            search_query = input("Enter the name of the VM you want to delete:") 
+            print()
+            vm_found = False ##variable to track if a valid VM was entered
+
+            for vm in vms:
+                if search_query.lower() == vm.name.lower(): ##sanitizes input to lowercase
+                    vm_found = True
+                    ## gets Y/N confirmation from user
+                    confirm = input(f"Are you sure you want to delete VM {vm.name}? This is irreversible, and the VM's storage will be irrecoverable. (Y/N):")
+                    if confirm == 'Y':
+                        print(f"Deleting VM {vm.name}...") ## tells user what it is doing
+                        task = vm.Destroy_Task() ## tells Vcenter to delete VM
+                        print(f"VM deletion initiated for {vm.name}...") ## tells user process has begun
+                    else:
+                        print("VM deletion has been cancelled.")
+
+            if not vm_found: #if user searches for nonexistent VM
+                print(f"VM {search_query} not found!")
+
         else:
             print("Invalid option!") ## if user picks a number with no assigned option.
         print()
